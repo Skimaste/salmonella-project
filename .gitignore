@@ -225,3 +225,5 @@ __marimo__/
 
 # data
 data/*
+
+.vscode/
