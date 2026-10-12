@@ -1,0 +1,15 @@
+================================================================================
+VARIATION CALLING REPORT: Wild-Type (Wild-Type) vs Variant (Variant)
+================================================================================
+
+[Variant 1] Type: MNP
+  Wild-Type Allele: TTT (mean read depth: 12.2x)
+  Variant Allele: GGG (mean read depth: 6.1x)
+
+  Genomic Context (Forward orientation):
+    Wild-Type: ... GCTCTACACCTAGCTTCTGGGCGAG [TTT] ACGGGTTGTTAAACCTTCGATTCCG ...
+    Variant: ... GCTCTACACCTAGCTTCTGGGCGAG [GGG] ACGGGTTGTTAAACCTTCGATTCCG ...
+  Complementary Strand:
+    Wild-Type: ... CGGAATCGAAGGTTTAACAACCCGT [AAA] CTCGCCCAGAAGCTAGGTGTAGAGC ...
+    Variant: ... CGGAATCGAAGGTTTAACAACCCGT [CCC] CTCGCCCAGAAGCTAGGTGTAGAGC ...
+--------------------------------------------------------------------------------
