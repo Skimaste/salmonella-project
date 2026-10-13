@@ -6,9 +6,10 @@
 #set page(
   paper: "a4",
   margin: (top: 2.5cm, bottom: 2.5cm, left: 2.2cm, right: 2.2cm),
-  header: locate(loc => {
-    if loc.page() > 1 {
-      text(9pt, fill: luma(100), font: "Libertinus Serif")[
+  header: context {
+    let p = counter(page).get().first()
+    if p > 1 [
+      #text(9pt, fill: luma(100), font: "Libertinus Serif")[
         #grid(
           columns: (1fr, 1fr),
           align(left)[_Reference-Free Variant Detection in Salmonella enterica_],
@@ -17,19 +18,21 @@
         #v(-0.3em)
         #line(length: 100%, stroke: 0.4pt + luma(180))
       ]
-    }
-  }),
-  footer: locate(loc => {
+    ]
+  },
+  footer: context {
+    let p = counter(page).get().first()
+    let n = counter(page).final().first()
     text(9pt, fill: luma(120), font: "Libertinus Serif")[
       #line(length: 100%, stroke: 0.3pt + luma(200))
       #v(-0.2em)
       #grid(
         columns: (1fr, 1fr),
         align(left)[M1 Computational Biology --- Outbreak Project],
-        align(right)[Page #loc.page() of #counter(page).final(loc).at(0)]
+        align(right)[Page #p of #n]
       )
     ]
-  })
+  }
 )
 
 #set text(
@@ -45,6 +48,7 @@
 )
 
 #set heading(numbering: "1.1")
+#set math.equation(numbering: "(1)")
 
 #show heading: it => [
   #v(0.6em)
@@ -95,7 +99,7 @@
   #text(weight: "bold", fill: rgb("#1b365d"))[Abstract] --- 
   Whole-genome sequencing (WGS) has become the gold standard for bacterial outbreak surveillance. Traditional variation detection pipelines rely heavily on aligning short reads against an external reference genome. In microbial epidemiology, however, reference mapping introduces severe reference bias, struggles with divergent mobile elements (e.g., plasmids carrying antibiotic resistance cassettes), and misses novel genomic variations. In this project, we develop and evaluate an end-to-end, reference-free variation discovery pipeline for _Salmonella enterica_. 
   
-  First, we establish a theoretical and empirical framework in `kmerAnalysis.py` for selecting the optimal $k$-mer length $k$, combining an information-theoretic lower bound ($k >= 12$), a binomial-Poisson sequencing error model, and multiplicity spectrum valley contrast. Second, we implement `snpDetect.py`, a reference-free variant caller operating in linear time $O(N)$ that mines differential solid $k$-mers between wild-type and resistant outbreak strains, chains overlapping $k$-mers into local contigs, and aligns matching flanking anchors to resolve sequence bubbles. Applied to deep Illumina reads from a _Salmonella enterica_ outbreak, our pipeline accurately pinpoints a causative multi-nucleotide polymorphism (MNP, `TTT` $->$ `GGG`) conferring antibiotic resistance, validated without requiring whole-genome assembly or reference alignment.
+  First, we establish a theoretical and empirical framework in `kmerAnalysis.py` for selecting the optimal $k$-mer length $k$, combining an information-theoretic lower bound ($k >= 12$), a binomial-Poisson sequencing error model, and multiplicity spectrum valley contrast. Second, we implement `snpDetect.py`, a reference-free variant caller operating in linear time $O(N)$ that mines differential solid $k$-mers between wild-type and resistant outbreak strains, chains overlapping $k$-mers into local contigs, and aligns matching flanking anchors to resolve sequence bubbles. Applied to deep Illumina reads from a _Salmonella enterica_ outbreak, our pipeline accurately pinpoints a causative multi-nucleotide polymorphism (MNP, $T T T -> G G G$) conferring antibiotic resistance, validated without requiring whole-genome assembly or reference alignment.
 ]
 
 #v(1em)
@@ -127,10 +131,10 @@ The choice of the $k$-mer length $k$ is the central parameter governing both sen
 
 To avoid random collision between distinct genomic loci, the total number of possible $k$-mers of alphabet size $|Sigma| = 4$ must exceed the bacterial genome length $G$. For a genome of length $G$, random collision occurs if $4^k <= G$. Hence, the minimum theoretical bound is:
 
-$ k_"min" = ceil(log_4(G)) = ceil(ln(G) / ln(4)) $ <eq:lower_bound>
+$ k_"min" = ceil.l log_4(G) ceil.r = ceil.l ln(G) / ln(4) ceil.r $ <eq:lower_bound>
 
 For _Salmonella enterica_ ($G approx 4.8 times 10^6$ to $5.0 times 10^6$ bp):
-$ k_"min" = ceil(log_4(5.0 times 10^6)) = ceil(11.13) = 12 $
+$ k_"min" = ceil.l log_4(5.0 times 10^6) ceil.r = ceil.l 11.13 ceil.r = 12 $
 
 Values of $k < 12$ inevitably produce severe random collisions where distinct, unrelated genomic loci share identical $k$-mers by pure combinatorial chance.
 
@@ -144,11 +148,11 @@ Illumina sequencing introduces substitution errors at an empirical per-base rate
 
 A read of length $l$ contains $l - k + 1$ overlapping $k$-mers. The probability that a uniformly sampled read covers a specific genomic position is $p_k = (l - k + 1) / G$. Over $N$ independent reads, the raw read coverage follows:
 
-$ X_k tilde.op "Binomial"(N, p_k) $
+$ X_k tilde "Binomial"(N, p_k) $
 
 A $k$-mer observation is error-free only if all $k$ consecutive nucleotides are sequenced without error. Under independent errors, this occurs with probability $(1 - epsilon)^k$. Consequently, the number of error-free observations of a true genomic single-copy $k$-mer is modeled as:
 
-$ X_k^"true" tilde.op "Binomial"(N, p_k (1 - epsilon)^k) approx "Poisson"(lambda_k) $ <eq:poisson>
+$ X_k^"true" tilde "Binomial"(N, p_k (1 - epsilon)^k) approx "Poisson"(lambda_k) $ <eq:poisson>
 
 where the expected true $k$-mer coverage depth is:
 
@@ -196,9 +200,9 @@ We evaluated six candidate odd $k$ values ($15, 23, 31, 39, 47, 55$) on the full
 
 #table(
   columns: (1fr, 1.2fr, 1.3fr, 1.5fr, 1.6fr, 1.4fr, 1.4fr, 1.5fr),
-  align: (center, center, center, center, center, center, center, center),
+  align: center + horizon,
   stroke: 0.5pt + luma(180),
-  fill: (col, row) => if row == 0 { rgb("#e8eef5") } else if row == 3 or row == 5 { rgb("#f8fafc") } else { none },
+  fill: (col, row) => if row == 0 { rgb("#e8eef5") } else { none },
   [*$k$*], [*Cutoff ($t$)*], [*Peak Depth*], [*Error Types %*], [*Solid $k$-mers*], [*Linearity %*], [*Branching %*], [*Valley Contrast*],
   [15], [14], [90x], [77.8%], [4,797,111], [1.7%], [0.1%], [0.0000],
   [23], [14], [85x], [83.3%], [4,901,421], [1.6%], [0.0%], [0.0000],
@@ -225,14 +229,14 @@ To assess how repeat ambiguity is resolved as $k$ varies, we examine the topolog
 
 == Node Classification and Linearity Metric
 
-A node $v in V$ is classified based on its indegree $d^-(v)$ and outdegree $d^+(v)$:
-- *Linear Node*: $d^-(v) = 1$ and $d^+(v) = 1$. The path through $v$ is completely unambiguous.
-- *Branching Node*: $d^-(v) > 1$ or $d^+(v) > 1$. Represents sequence repeats, bifurcations, or alternative alleles.
-- *Terminal Node*: $d^-(v) = 0$ or $d^+(v) = 0$. Represents dead ends (coverage gaps or contig boundaries).
+A node $v in V$ is classified based on its indegree $d_"in"(v)$ and outdegree $d_"out"(v)$:
+- *Linear Node*: $d_"in"(v) = 1$ and $d_"out"(v) = 1$. The path through $v$ is completely unambiguous.
+- *Branching Node*: $d_"in"(v) > 1$ or $d_"out"(v) > 1$. Represents sequence repeats, bifurcations, or alternative alleles.
+- *Terminal Node*: $d_"in"(v) = 0$ or $d_"out"(v) = 0$. Represents dead ends (coverage gaps or contig boundaries).
 
 The graph linearity fraction is defined as:
 
-$ f_"linear"(k) = (# { v in V mid d^-(v) = 1 " and " d^+(v) = 1 }) / (|V|) $
+$ f_"linear"(k) = (|{ v in V : d_"in"(v) = 1 " and " d_"out"(v) = 1 }|) / (|V|) $
 
 Repeat resolution improves with increasing $k$: any genomic repeat of length $L_"repeat" < k$ is fully resolved into an unambiguous linear path in $G_k$. Conversely, if $k$ exceeds coverage support, gaps fragment linear paths. We find that $k = 31$ and $k = 47$ provide optimal balance, achieving high repeat resolution while preserving high sequencing depth ($> 70times$).
 
@@ -281,7 +285,7 @@ Local contigs $C_A$ and $C_B$ are paired by matching exact common prefixes (left
 The variant type is called automatically:
 - *SNP*: $|"allele"_A| = |"allele"_B| = 1$.
 - *MNP*: $|"allele"_A| = |"allele"_B| > 1$.
-- *INDEL*: $|"allele"_A| eq.not |"allele"_B|$.
+- *INDEL*: $|"allele"_A| != |"allele"_B|$.
 
 // -----------------------------------------------------------------------------
 // 6. EXPERIMENTAL RESULTS
