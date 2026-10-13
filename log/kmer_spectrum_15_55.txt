@@ -1,0 +1,25 @@
+============================================================================================
+K-MER MULTIPLICITY SPECTRUM & SELECTION ANALYSIS
+============================================================================================
+Theoretical Lower Bound : k >= 12 (to avoid random collision in 4,800,000 bp genome)
+Read Length             : 250 bp
+Error Rate Model        : ~1.0% Illumina substitutions
+--------------------------------------------------------------------------------------------
+k     Cutoff (t)  Peak Depth  Error Types %  Solid k-mers  Linearity %  Branching %  Valley Contrast
+--------------------------------------------------------------------------------------------
+15    2           9x          27.2%          4,806,451     1.7%         0.1%         0.0578         
+23    2           8x          34.1%          4,902,813     1.6%         0.0%         0.0630         
+31    2           8x          38.9%          4,906,549     1.6%         0.0%         0.0819         
+39    2           7x          42.7%          4,905,926     1.6%         0.0%         0.1044         
+47    2           7x          45.6%          4,901,835     1.6%         0.0%         0.1327         
+55    2           7x          48.0%          4,893,838     1.6%         0.0%         0.1701         
+============================================================================================
+
+[RECOMMENDATION]
+  Recommended k = 55:
+  - Peak Coverage Support: 7x with threshold t >= 2.
+  - Graph Linearity: 1.6% (Branching: 0.0%).
+  - Solid Genomic k-mers: 4,893,838 (matches expected ~4.8M bacterial genome).
+  - Contrast Ratio: 0.1701 (clean valley separation from sequencing errors).
+
+[*] Multiplicity spectrum plot saved to: ./salmonella-project/kmer_spectrum_15_55.png
