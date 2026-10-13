@@ -282,10 +282,44 @@ def save_spectrum_dataframe(results, output_path: str):
         return records
 
 
-def plot_from_dataframe(df_path_or_df, output_path: str = None, min_x: int = 1, max_x: int = 150):
+def compute_moving_average(x: list, y: list, window: int):
+    """
+    Compute a centered moving average over multiplicity spectrum counts.
+    - Centers the window so peak and valley positions remain preserved on the x-axis.
+    - Evaluates across a dense multiplicity grid to handle missing multiplicities correctly.
+    - Retains only positive smoothed values for log-scale plotting compatibility.
+    """
+    if not x or not y or window is None or window <= 1:
+        return list(x), list(y)
+
+    val_dict = dict(zip(x, y))
+    min_x, max_x = min(x), max(x)
+    dense_x = list(range(min_x, max_x + 1))
+    dense_y = [float(val_dict.get(xi, 0)) for xi in dense_x]
+
+    n = len(dense_y)
+    half = window // 2
+    smooth_x = []
+    smooth_y = []
+
+    for i in range(n):
+        left = max(0, i - half)
+        right = min(n, i + half + 1)
+        sub = dense_y[left:right]
+        avg = sum(sub) / len(sub) if sub else 0.0
+        if avg > 0:
+            smooth_x.append(dense_x[i])
+            smooth_y.append(avg)
+
+    return smooth_x, smooth_y
+
+
+def plot_from_dataframe(df_path_or_df, output_path: str = None, min_x: int = 1, max_x: int = 150,
+                        ma_width: int = None):
     """
     Re-generate the multiplicity spectrum plot directly from a saved DataFrame CSV
     or pandas DataFrame without re-running k-mer counting.
+    Supports centered moving average smoothing with customizable window width.
     """
     try:
         import matplotlib.pyplot as plt
@@ -305,9 +339,16 @@ def plot_from_dataframe(df_path_or_df, output_path: str = None, min_x: int = 1, 
         fig, ax = plt.subplots(figsize=(8, 5))
         for k_val, group in df.groupby("k"):
             sub = group[(group["multiplicity"] >= min_x) & (group["multiplicity"] <= max_x)]
+            x_vals = list(sub["multiplicity"])
+            y_vals = list(sub["count"])
+            if ma_width and ma_width > 1:
+                x_vals, y_vals = compute_moving_average(x_vals, y_vals, ma_width)
+
             peak_val = sub["genomic_peak"].iloc[0] if "genomic_peak" in sub.columns else "N/A"
-            ax.plot(sub["multiplicity"], sub["count"], marker=".", markersize=4,
-                    label=f"k = {k_val} (peak @ {peak_val}x)")
+            lbl = f"k = {k_val} (peak @ {peak_val}x)"
+            if ma_width and ma_width > 1:
+                lbl += f" [MA {ma_width}]"
+            ax.plot(x_vals, y_vals, marker=".", markersize=4, label=lbl)
 
     except ImportError:
         import csv
@@ -328,16 +369,25 @@ def plot_from_dataframe(df_path_or_df, output_path: str = None, min_x: int = 1, 
         for k_val, items in groupby(rows, key=lambda r: int(r["k"])):
             item_list = list(items)
             sub = [r for r in item_list if min_x <= int(r["multiplicity"]) <= max_x]
-            x = [int(r["multiplicity"]) for r in sub]
-            y = [int(r["count"]) for r in sub]
+            x_vals = [int(r["multiplicity"]) for r in sub]
+            y_vals = [int(r["count"]) for r in sub]
+            if ma_width and ma_width > 1:
+                x_vals, y_vals = compute_moving_average(x_vals, y_vals, ma_width)
+
             peak_val = sub[0].get("genomic_peak", "N/A") if sub else "N/A"
-            ax.plot(x, y, marker=".", markersize=4, label=f"k = {k_val} (peak @ {peak_val}x)")
+            lbl = f"k = {k_val} (peak @ {peak_val}x)"
+            if ma_width and ma_width > 1:
+                lbl += f" [MA {ma_width}]"
+            ax.plot(x_vals, y_vals, marker=".", markersize=4, label=lbl)
 
     ax.set_yscale("log")
     ax.set_xlim(left=min_x, right=max_x)
     ax.set_xlabel("k-mer Multiplicity (Coverage Depth)")
     ax.set_ylabel("Number of Distinct k-mers (log scale)")
-    ax.set_title(f"k-mer Multiplicity Spectrum (x: {min_x} to {max_x})")
+    title = f"k-mer Multiplicity Spectrum (x: {min_x} to {max_x})"
+    if ma_width and ma_width > 1:
+        title += f" [Moving Avg width={ma_width}]"
+    ax.set_title(title)
     ax.grid(True, which="both", alpha=0.3, linestyle="--")
     ax.legend(loc="upper right")
     plt.tight_layout()
@@ -350,11 +400,12 @@ def plot_from_dataframe(df_path_or_df, output_path: str = None, min_x: int = 1, 
     plt.close()
 
 
-def plot_spectra(results: list, output_path: str = None, min_x: int = 1, max_x: int = 150):
+def plot_spectra(results: list, output_path: str = None, min_x: int = 1, max_x: int = 150,
+                 ma_width: int = None):
     """
     Generate plots comparing multiplicity spectra, graph linearity,
     and branching fraction across candidate values of k.
-    Supports customizable x-axis limits (min_x, max_x).
+    Supports customizable x-axis limits (min_x, max_x) and moving average smoothing.
     """
     try:
         import matplotlib.pyplot as plt
@@ -375,13 +426,22 @@ def plot_spectra(results: list, output_path: str = None, min_x: int = 1, max_x: 
         spec = res["spectrum"]
         x = [c for c in range(min_x, max_x + 1) if c in spec]
         y = [spec[c] for c in x]
-        ax1.plot(x, y, marker=".", markersize=4, label=f"k = {k} (peak @ {res['genomic_peak']}x)")
+        if ma_width and ma_width > 1:
+            x, y = compute_moving_average(x, y, ma_width)
+
+        lbl = f"k = {k} (peak @ {res['genomic_peak']}x)"
+        if ma_width and ma_width > 1:
+            lbl += f" [MA {ma_width}]"
+        ax1.plot(x, y, marker=".", markersize=4, label=lbl)
 
     ax1.set_yscale("log")
     ax1.set_xlim(left=min_x, right=max_x)
     ax1.set_xlabel("k-mer Multiplicity (Coverage Depth)")
     ax1.set_ylabel("Number of Distinct k-mers (log scale)")
-    ax1.set_title(f"k-mer Multiplicity Spectrum across Candidate k (x: {min_x} to {max_x})")
+    title1 = f"k-mer Multiplicity Spectrum across Candidate k (x: {min_x} to {max_x})"
+    if ma_width and ma_width > 1:
+        title1 += f" [Moving Avg width={ma_width}]"
+    ax1.set_title(title1)
     ax1.grid(True, which="both", alpha=0.3, linestyle="--")
     ax1.legend(loc="upper right")
 
@@ -471,7 +531,8 @@ def print_comparison_table(results: list, theory: dict):
 def run_kmer_analysis(fasta_path: str, k_list: list, max_reads: int = 150000,
                       output_plot: str = None, output_df: str = None,
                       output_summary_df: str = None,
-                      min_x: int = 1, max_x: int = 150, genome_size: int = 4800000):
+                      min_x: int = 1, max_x: int = 150, ma_width: int = None,
+                      genome_size: int = 4800000):
     """Main execution pipeline."""
     theory = theoretical_bounds(genome_size=genome_size)
     results = []
@@ -527,7 +588,7 @@ def run_kmer_analysis(fasta_path: str, k_list: list, max_reads: int = 150000,
                 print(f"[*] Summary metrics saved to: {output_summary_df}")
 
     if output_plot:
-        plot_spectra(results, output_path=output_plot, min_x=min_x, max_x=max_x)
+        plot_spectra(results, output_path=output_plot, min_x=min_x, max_x=max_x, ma_width=ma_width)
 
     return results
 
@@ -550,6 +611,10 @@ def main():
                         help="Maximum k-mer multiplicity (x-axis limit) to plot (default: 150)")
     parser.add_argument("--min-x", "--x-min", type=int, default=1,
                         help="Minimum k-mer multiplicity (x-axis limit) to plot (default: 1)")
+    parser.add_argument("--moving-average", "--smooth", type=int, nargs="?", const=5, default=None, metavar="WIDTH",
+                        help="Apply moving average smoothing over spectrum counts for each k-mer curve (default width: 5)")
+    parser.add_argument("--ma-width", type=int, default=None, metavar="WIDTH",
+                        help="Window width for the moving average (alias for --moving-average)")
     parser.add_argument("--output-df", "--save-df", type=str, default=None,
                         help="File path to save spectrum results as a DataFrame CSV (e.g. ./kmer_spectrum_df.csv)")
     parser.add_argument("--output-summary-df", type=str, default=None,
@@ -561,10 +626,12 @@ def main():
 
     args = parser.parse_args()
 
+    ma_width = args.ma_width if args.ma_width is not None else args.moving_average
+
     # Re-plot directly from an existing DataFrame CSV
     if args.plot_from_df:
         print(f"[*] Generating plot directly from saved DataFrame: {args.plot_from_df}")
-        plot_from_dataframe(args.plot_from_df, output_path=args.output_plot, min_x=args.min_x, max_x=args.max_x)
+        plot_from_dataframe(args.plot_from_df, output_path=args.output_plot, min_x=args.min_x, max_x=args.max_x, ma_width=ma_width)
         return
 
     if not args.fasta:
@@ -584,6 +651,7 @@ def main():
         output_summary_df=args.output_summary_df,
         min_x=args.min_x,
         max_x=args.max_x,
+        ma_width=ma_width,
         genome_size=args.genome_size
     )
 
