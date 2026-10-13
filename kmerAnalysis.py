@@ -184,10 +184,177 @@ def analyze_graph_topology(counts: Counter, threshold: int, k: int, max_sample: 
     }
 
 
-def plot_spectra(results: list, output_path: str = None):
+def spectrum_to_dataframe(results: list, wide: bool = False):
+    """
+    Convert k-mer multiplicity spectrum results into a DataFrame.
+    If pandas is installed, returns a pd.DataFrame; otherwise returns a list of row dicts.
+
+    Columns in long (tidy) format:
+    - k: k-mer length
+    - multiplicity: k-mer coverage depth
+    - count: number of distinct k-mers at this multiplicity
+    - threshold: valley cutoff (t) separating error noise from genomic k-mers
+    - genomic_peak: estimated single-copy genomic coverage peak
+    - is_solid: True if multiplicity >= threshold
+
+    If wide=True: returns DataFrame indexed by multiplicity with k values as columns.
+    """
+    records = []
+    for res in results:
+        k = res["k"]
+        trough = res["threshold"]
+        peak = res["genomic_peak"]
+        spec = res["spectrum"]
+        for mult, count in sorted(spec.items()):
+            records.append({
+                "k": k,
+                "multiplicity": mult,
+                "count": count,
+                "threshold": trough,
+                "genomic_peak": peak,
+                "is_solid": mult >= trough
+            })
+
+    try:
+        import pandas as pd
+        df = pd.DataFrame(records)
+        if wide:
+            return df.pivot(index="multiplicity", columns="k", values="count").fillna(0).astype(int)
+        return df
+    except ImportError:
+        return records
+
+
+def summary_to_dataframe(results: list):
+    """
+    Convert summary analysis metrics across all evaluated k values to a DataFrame.
+    """
+    records = []
+    for r in results:
+        records.append({
+            "k": r["k"],
+            "threshold": r["threshold"],
+            "genomic_peak": r["genomic_peak"],
+            "peak_frequency": r.get("peak_frequency", 0),
+            "valley_frequency": r.get("valley_frequency", 0),
+            "contrast_ratio": r.get("contrast_ratio", 0.0),
+            "erroneous_types": r.get("erroneous_types", 0),
+            "solid_types": r.get("solid_types", 0),
+            "erroneous_type_fraction": r.get("erroneous_type_fraction", 0.0),
+            "total_unique_kmers": r.get("total_unique_kmers", 0),
+            "linear_fraction": r.get("linear_fraction", 0.0),
+            "branching_fraction": r.get("branching_fraction", 0.0),
+        })
+
+    try:
+        import pandas as pd
+        return pd.DataFrame(records)
+    except ImportError:
+        return records
+
+
+def save_spectrum_dataframe(results, output_path: str):
+    """
+    Save spectrum results as a CSV (or TSV) file.
+    Supports either the results list or an existing pandas DataFrame.
+    Uses pandas if installed, with a standard csv module fallback.
+    """
+    sep = "\t" if output_path.endswith(".tsv") else ","
+
+    try:
+        import pandas as pd
+        if isinstance(results, pd.DataFrame):
+            df = results
+        else:
+            df = spectrum_to_dataframe(results)
+        df.to_csv(output_path, sep=sep, index=False)
+        print(f"[*] Multiplicity spectrum DataFrame saved to: {output_path}")
+        return df
+    except ImportError:
+        import csv
+        records = spectrum_to_dataframe(results)
+        if records and isinstance(records, list):
+            with open(output_path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.DictWriter(f, fieldnames=list(records[0].keys()), delimiter=sep)
+                writer.writeheader()
+                writer.writerows(records)
+            print(f"[*] Multiplicity spectrum DataFrame saved to: {output_path} (via csv writer)")
+        return records
+
+
+def plot_from_dataframe(df_path_or_df, output_path: str = None, min_x: int = 1, max_x: int = 150):
+    """
+    Re-generate the multiplicity spectrum plot directly from a saved DataFrame CSV
+    or pandas DataFrame without re-running k-mer counting.
+    """
+    try:
+        import matplotlib.pyplot as plt
+    except ImportError:
+        print("[!] Matplotlib not available; skipping plot generation.")
+        return
+
+    # Load data
+    try:
+        import pandas as pd
+        if isinstance(df_path_or_df, str):
+            sep = "\t" if df_path_or_df.endswith(".tsv") else ","
+            df = pd.read_csv(df_path_or_df, sep=sep)
+        else:
+            df = df_path_or_df
+
+        fig, ax = plt.subplots(figsize=(8, 5))
+        for k_val, group in df.groupby("k"):
+            sub = group[(group["multiplicity"] >= min_x) & (group["multiplicity"] <= max_x)]
+            peak_val = sub["genomic_peak"].iloc[0] if "genomic_peak" in sub.columns else "N/A"
+            ax.plot(sub["multiplicity"], sub["count"], marker=".", markersize=4,
+                    label=f"k = {k_val} (peak @ {peak_val}x)")
+
+    except ImportError:
+        import csv
+        # Pure Python fallback
+        if isinstance(df_path_or_df, str):
+            sep = "\t" if df_path_or_df.endswith(".tsv") else ","
+            rows = []
+            with open(df_path_or_df, "r", encoding="utf-8") as f:
+                reader = csv.DictReader(f, delimiter=sep)
+                for r in reader:
+                    rows.append(r)
+        else:
+            rows = df_path_or_df
+
+        from itertools import groupby
+        fig, ax = plt.subplots(figsize=(8, 5))
+        rows.sort(key=lambda r: int(r["k"]))
+        for k_val, items in groupby(rows, key=lambda r: int(r["k"])):
+            item_list = list(items)
+            sub = [r for r in item_list if min_x <= int(r["multiplicity"]) <= max_x]
+            x = [int(r["multiplicity"]) for r in sub]
+            y = [int(r["count"]) for r in sub]
+            peak_val = sub[0].get("genomic_peak", "N/A") if sub else "N/A"
+            ax.plot(x, y, marker=".", markersize=4, label=f"k = {k_val} (peak @ {peak_val}x)")
+
+    ax.set_yscale("log")
+    ax.set_xlim(left=min_x, right=max_x)
+    ax.set_xlabel("k-mer Multiplicity (Coverage Depth)")
+    ax.set_ylabel("Number of Distinct k-mers (log scale)")
+    ax.set_title(f"k-mer Multiplicity Spectrum (x: {min_x} to {max_x})")
+    ax.grid(True, which="both", alpha=0.3, linestyle="--")
+    ax.legend(loc="upper right")
+    plt.tight_layout()
+
+    if output_path:
+        plt.savefig(output_path, dpi=200)
+        print(f"[*] Iterative spectrum plot saved to: {output_path}")
+    else:
+        plt.show()
+    plt.close()
+
+
+def plot_spectra(results: list, output_path: str = None, min_x: int = 1, max_x: int = 150):
     """
     Generate plots comparing multiplicity spectra, graph linearity,
     and branching fraction across candidate values of k.
+    Supports customizable x-axis limits (min_x, max_x).
     """
     try:
         import matplotlib.pyplot as plt
@@ -206,14 +373,15 @@ def plot_spectra(results: list, output_path: str = None):
     for res in results:
         k = res["k"]
         spec = res["spectrum"]
-        x = [c for c in range(1, 100) if c in spec]
+        x = [c for c in range(min_x, max_x + 1) if c in spec]
         y = [spec[c] for c in x]
         ax1.plot(x, y, marker=".", markersize=4, label=f"k = {k} (peak @ {res['genomic_peak']}x)")
 
     ax1.set_yscale("log")
+    ax1.set_xlim(left=min_x, right=max_x)
     ax1.set_xlabel("k-mer Multiplicity (Coverage Depth)")
     ax1.set_ylabel("Number of Distinct k-mers (log scale)")
-    ax1.set_title("k-mer Multiplicity Spectrum across Candidate k")
+    ax1.set_title(f"k-mer Multiplicity Spectrum across Candidate k (x: {min_x} to {max_x})")
     ax1.grid(True, which="both", alpha=0.3, linestyle="--")
     ax1.legend(loc="upper right")
 
@@ -301,7 +469,9 @@ def print_comparison_table(results: list, theory: dict):
 
 
 def run_kmer_analysis(fasta_path: str, k_list: list, max_reads: int = 150000,
-                      output_plot: str = None, genome_size: int = 4800000):
+                      output_plot: str = None, output_df: str = None,
+                      output_summary_df: str = None,
+                      min_x: int = 1, max_x: int = 150, genome_size: int = 4800000):
     """Main execution pipeline."""
     theory = theoretical_bounds(genome_size=genome_size)
     results = []
@@ -336,8 +506,28 @@ def run_kmer_analysis(fasta_path: str, k_list: list, max_reads: int = 150000,
 
     print_comparison_table(results, theory)
 
+    if output_df:
+        save_spectrum_dataframe(results, output_path=output_df)
+
+    if output_summary_df:
+        sum_df = summary_to_dataframe(results)
+        sep = "\t" if output_summary_df.endswith(".tsv") else ","
+        try:
+            import pandas as pd
+            if isinstance(sum_df, pd.DataFrame):
+                sum_df.to_csv(output_summary_df, sep=sep, index=False)
+                print(f"[*] Summary metrics DataFrame saved to: {output_summary_df}")
+        except ImportError:
+            import csv
+            if sum_df and isinstance(sum_df, list):
+                with open(output_summary_df, "w", newline="", encoding="utf-8") as f:
+                    writer = csv.DictWriter(f, fieldnames=list(sum_df[0].keys()), delimiter=sep)
+                    writer.writeheader()
+                    writer.writerows(sum_df)
+                print(f"[*] Summary metrics saved to: {output_summary_df}")
+
     if output_plot:
-        plot_spectra(results, output_path=output_plot)
+        plot_spectra(results, output_path=output_plot, min_x=min_x, max_x=max_x)
 
     return results
 
@@ -346,7 +536,8 @@ def main():
     parser = argparse.ArgumentParser(
         description="Analyze k-mer multiplicity spectrum and determine optimal k for reference-free SNP calling."
     )
-    parser.add_argument("fasta", help="Path to input FASTA sequencing reads")
+    parser.add_argument("fasta", nargs="?", default=None,
+                        help="Path to input FASTA sequencing reads (optional if --plot-from-df is used)")
     parser.add_argument("-k", "--kmer", type=int, default=None,
                         help="Single k value to inspect (default: evaluates candidate list)")
     parser.add_argument("--k-list", type=str, default="21,31,41,47,55",
@@ -355,10 +546,29 @@ def main():
                         help="Maximum reads to sample for rapid evaluation (default: 150000)")
     parser.add_argument("-o", "--output-plot", type=str, default="./salmonella-project/kmer_spectrum.png",
                         help="File path to save the spectrum plot (default: ./salmonella-project/kmer_spectrum.png)")
+    parser.add_argument("--max-x", "--x-max", type=int, default=150,
+                        help="Maximum k-mer multiplicity (x-axis limit) to plot (default: 150)")
+    parser.add_argument("--min-x", "--x-min", type=int, default=1,
+                        help="Minimum k-mer multiplicity (x-axis limit) to plot (default: 1)")
+    parser.add_argument("--output-df", "--save-df", type=str, default=None,
+                        help="File path to save spectrum results as a DataFrame CSV (e.g. ./kmer_spectrum_df.csv)")
+    parser.add_argument("--output-summary-df", type=str, default=None,
+                        help="File path to save summary metrics table as a DataFrame CSV")
+    parser.add_argument("--plot-from-df", type=str, default=None,
+                        help="Re-plot directly from a saved spectrum DataFrame CSV without re-running k-mer analysis")
     parser.add_argument("-g", "--genome-size", type=int, default=4800000,
                         help="Estimated genome size in bp (default: 4800000 for Salmonella enterica)")
 
     args = parser.parse_args()
+
+    # Re-plot directly from an existing DataFrame CSV
+    if args.plot_from_df:
+        print(f"[*] Generating plot directly from saved DataFrame: {args.plot_from_df}")
+        plot_from_dataframe(args.plot_from_df, output_path=args.output_plot, min_x=args.min_x, max_x=args.max_x)
+        return
+
+    if not args.fasta:
+        parser.error("the following arguments are required: fasta (unless --plot-from-df is specified)")
 
     if args.kmer is not None:
         k_list = [args.kmer]
@@ -370,6 +580,10 @@ def main():
         k_list=k_list,
         max_reads=args.max_reads,
         output_plot=args.output_plot,
+        output_df=args.output_df,
+        output_summary_df=args.output_summary_df,
+        min_x=args.min_x,
+        max_x=args.max_x,
         genome_size=args.genome_size
     )
 

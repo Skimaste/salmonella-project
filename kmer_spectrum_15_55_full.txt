@@ -1,0 +1,44 @@
+python ./salmonella-project/kmerAnalysis.py \
+  ./salmonella-project/data/salmonella-enterica/salmonella-enterica.reads.fna --k-list 15,23,31,39,47,55 -m 2500000 -o ./salmonella-project/kmer_spectrum_15_55_full.png
+[*] Running k-mer spectrum analysis on: ./salmonella-project/data/salmonella-enterica/salmonella-enterica.reads.fna
+    Evaluating candidate k values: [15, 23, 31, 39, 47, 55]
+    Sample size: 2,500,000 reads for fast evaluation
+
+Analyzing k=15:  80%|█████████████████████████████████████████▍          | 1993167/2500000 [04:38<01:10, 7161.60reads/s]
+    Loaded 1,993,167 reads (498,291,750 bp, 21,578,584 unique canonical k-mers)
+Analyzing k=23:  80%|█████████████████████████████████████████▍          | 1993167/2500000 [04:30<01:08, 7378.11reads/s]
+    Loaded 1,993,167 reads (498,291,750 bp, 29,350,962 unique canonical k-mers)
+Analyzing k=31:  80%|█████████████████████████████████████████▍          | 1993167/2500000 [04:27<01:07, 7463.31reads/s]
+    Loaded 1,993,167 reads (498,291,750 bp, 35,100,400 unique canonical k-mers)
+Analyzing k=39:  80%|█████████████████████████████████████████▍          | 1993167/2500000 [04:27<01:08, 7444.29reads/s]
+    Loaded 1,993,167 reads (498,291,750 bp, 40,209,459 unique canonical k-mers)
+Analyzing k=47:  80%|█████████████████████████████████████████▍          | 1993167/2500000 [04:26<01:07, 7475.59reads/s]
+    Loaded 1,993,167 reads (498,291,750 bp, 44,710,685 unique canonical k-mers)
+Analyzing k=55:  80%|█████████████████████████████████████████▍          | 1993167/2500000 [04:23<01:07, 7564.35reads/s]
+    Loaded 1,993,167 reads (498,291,750 bp, 48,631,404 unique canonical k-mers)
+
+============================================================================================
+K-MER MULTIPLICITY SPECTRUM & SELECTION ANALYSIS
+============================================================================================
+Theoretical Lower Bound : k >= 12 (to avoid random collision in 4,800,000 bp genome)
+Read Length             : 250 bp
+Error Rate Model        : ~1.0% Illumina substitutions
+--------------------------------------------------------------------------------------------
+k     Cutoff (t)  Peak Depth  Error Types %  Solid k-mers  Linearity %  Branching %  Valley Contrast
+--------------------------------------------------------------------------------------------
+15    14          90x         77.8%          4,797,111     1.7%         0.1%         0.0000         
+23    14          85x         83.3%          4,901,421     1.6%         0.0%         0.0000         
+31    9           81x         86.0%          4,908,433     1.6%         0.0%         0.0000         
+39    9           78x         87.8%          4,912,992     1.6%         0.0%         0.0000         
+47    9           73x         89.0%          4,916,328     1.6%         0.0%         0.0000         
+55    9           69x         89.9%          4,919,136     1.6%         0.0%         0.0000         
+============================================================================================
+
+[RECOMMENDATION]
+  Recommended k = 47:
+  - Peak Coverage Support: 73x with threshold t >= 9.
+  - Graph Linearity: 1.6% (Branching: 0.0%).
+  - Solid Genomic k-mers: 4,916,328 (matches expected ~4.8M bacterial genome).
+  - Contrast Ratio: 0.0000 (clean valley separation from sequencing errors).
+
+[*] Multiplicity spectrum plot saved to: ./salmonella-project/kmer_spectrum_15_55_full.png
